@@ -48,15 +48,18 @@ cmd_update_ip() {
   python3 ./ip-country.py ${cc}
   diff_and_remove_same asn_${cc}.lst "asn_${cc}-$sfx.lst"
   diff_and_remove_same ip_${cc}.lst "ip_${cc}-$sfx.lst"
-  cat ip_${cc}.lst ip_extra.txt > ip_allow.lst
+}
+
+cmd_merge_ip() {
+  cat "$@" | ../sort-cidr.sh > ip_allow.lst
 }
 
 cmd_help() {
-  echo "pull_db | update_ip | clean"
+  echo "pull_db | update_ip [<CC>] | merge_ip {<CC>}+ | clean"
 }
 
 cmd_clean() {
-  rm -f asn-*.txt ipasn-*.lst asn_RU-*.lst ip_RU-*.lst rib*.bz2 *.diff ip_allow*
+  rm -f asn-*.txt ipasn-*.lst asn_??-*.lst ip_??-*.lst rib*.bz2 *.diff ip_allow* asn_??.lst ip_??.lst
 }
 
 if [ -z "${1:-}" ] ; then
