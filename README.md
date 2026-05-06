@@ -10,21 +10,16 @@ Tools for IP-ASN-Country mapping.
 ```bash
 git clone --depth=1 git@github.com:furriest/radb-tools.git
 cd ./radb-tools
-pip3 install -r requirements.txt
+./dbctl install
 ```
 
 ## Usage
 
+Update databases
 ```bash
-./renew-db
-python3 ./ip-country.py RU
-python3 ./asn-country.py RU
-````
-or
-
-```bash
-python3 ./ip-country-ripe.py RU
-````
+./dbctl pull_db
+./dbctl update_ip
+```
 
 ## License
 [MIT](https://choosealicense.com/licenses/mit/)
