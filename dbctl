@@ -31,23 +31,86 @@ diff_and_remove_same() {
   fi
 }
 
-cmd_pull_db() {
+discover_rib_url() {
+  python3 -c "
+from ftplib import FTP
+ftp = FTP('archive.routeviews.org')
+ftp.login()
+months = sorted(ftp.nlst('bgpdata'), reverse=True)
+filepath = '/%s/RIBS' % months[0]
+ftp.cwd(filepath)
+fls = ftp.nlst()
+if not fls:
+    filepath = '/%s/RIBS' % months[1]
+    ftp.cwd(filepath)
+    fls = ftp.nlst()
+fn = max(fls)
+print('ftp://archive.routeviews.org%s/%s' % (filepath, fn))
+ftp.close()
+"
+}
+
+parse_force() {
+  force=false
+  if [ "${1:-}" = "--force" ] || [ "${1:-}" = "-f" ]; then
+    force=true
+    shift
+  fi
+}
+
+cmd_pull_asn() {
+  parse_force "$@"
   . venv/bin/activate
-  rm -f rib*.bz2
-  sfx=$(date)
+  sfx=$(date +%s)
   backup asn.txt "asn-$sfx.txt"
-  backup ipasn.lst "ipasn-$sfx.lst"
   wget -N https://ftp.ripe.net/ripe/asnames/asn.txt
-  pyasn_util_download.py --latest
-  pyasn_util_convert.py --single $(find . -maxdepth 1 -name "rib*.bz2" -print) ipasn.lst
   diff_and_remove_same asn.txt "asn-$sfx.txt"
-  diff_and_remove_same ipasn.lst "ipasn-$sfx.lst"
+}
+
+cmd_pull_rib() {
+  parse_force "$@"
+  . venv/bin/activate
+  rib_url=$(discover_rib_url)
+  rib_file=$(basename ${rib_url##*/})
+
+  if ! $force && [ -f "$rib_file" ] && bzip2 -t "$rib_file" 2>/dev/null; then
+    echo "Already have $rib_file — skipping download"
+  else
+    wget -c --read-timeout=10 --tries=10 "$rib_url"
+    echo -n "Verifying '$rib_file' image..."
+    bzip2 -t "$rib_file"
+    echo " done"
+    find . -maxdepth 1 -name "rib*.bz2" ! -name "$rib_file" -delete
+  fi
+}
+
+cmd_convert_rib() {
+  parse_force "$@"
+  . venv/bin/activate
+  rib_file=$(find . -maxdepth 1 -name "rib*.bz2" -print -quit)
+  if ! $force && [ -f ipasn.lst ] && grep -q "^; Original source: ${rib_file}$" ipasn.lst 2>/dev/null; then
+    echo "ipasn.lst already built from ${rib_file} — skipping conversion"
+  else
+    sfx=$(date +%s)
+    backup ipasn.lst "ipasn-$sfx.lst"
+    pyasn_util_convert.py --single "$rib_file" ipasn.lst
+    diff_and_remove_same ipasn.lst "ipasn-$sfx.lst"
+  fi
+}
+
+cmd_pull_db() {
+  parse_force "$@"
+  FORCE_ARG=""
+  $force && FORCE_ARG="--force"
+  cmd_pull_asn $FORCE_ARG
+  cmd_pull_rib $FORCE_ARG
+  cmd_convert_rib $FORCE_ARG
 }
 
 cmd_update_ip() {
   . venv/bin/activate
   cc=${1:-RU}
-  sfx=$(date)
+  sfx=$(date +%s)
   backup asn_${cc}.lst "asn_${cc}-$sfx.lst"
   backup ip_${cc}.lst "ip_${cc}-$sfx.lst"
   python3 ./asn-country.py ${cc}
@@ -61,7 +124,7 @@ cmd_merge_ip() {
 }
 
 cmd_help() {
-  echo "pull_db | update_ip [<CC>] | merge_ip {<CC>}+ | clean"
+  echo "pull_db [--force] | pull_asn | pull_rib | convert_rib | update_ip [<CC>] | merge_ip {<CC>}+ | clean"
 }
 
 cmd_clean() {
